@@ -26,9 +26,7 @@ class Proxy extends EventEmitter {
         proxy.destroy()
         this.sockets.delete(stream)
         if (err) {
-          this.emit('error', err)
-        } else if (stream === proxy) {
-          this.emit('close')
+          this.emit('clientError', err)
         }
       }
 
@@ -42,6 +40,12 @@ class Proxy extends EventEmitter {
 
     this.server.listen(port, host, () => {
       this.emit('listening')
+    })
+    this.server.on('close', () => {
+      this.emit('close')
+    })
+    this.server.on('error', () => {
+      this.emit('error')
     })
 
     return this

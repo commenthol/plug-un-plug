@@ -1,20 +1,24 @@
-/* eslint no-console: 0 */
+/* eslint no-console: 1 */
 
 const assert = require('assert')
 const net = require('net')
 const echo = require('./echo')
+const debug = require('debug')
 const Proxy = require('..')
+const _events = require('./_events')
 
 const PROXY_PORT = 3001
 const SERVER_PORT = 3002
 
+const logClient = debug('test:client')
+
 function clientWriter (port, str) {
   const client = net.createConnection({port})
   client.on('data', () => {
-    process.stdout.write('.')
+    // process.stdout.write('.')
   })
   client.on('error', (err) => {
-    console.log('client: %s', err)
+    logClient('%s', err)
   })
   function run () {
     if (client.destroyed) {
@@ -29,7 +33,7 @@ function clientWriter (port, str) {
 
 describe('Proxy', function () {
   const str = 'hello world!'
-  const strDestroy = Array(100000).fill(str).concat('cmd::destroy').join('\n')
+  // const strDestroy = Array(100000).fill(str).concat('cmd::destroy').join('\n')
 
   let _echo
 
@@ -53,13 +57,17 @@ describe('Proxy', function () {
   })
 
   it('client should disconnect on remote server destroy', function (done) {
-    const client = clientWriter(SERVER_PORT, strDestroy)
+    const client = clientWriter(SERVER_PORT, str)
+    setTimeout(() => {
+      _echo.destroyFirstSocket()
+    }, 100)
     let writes = 0
     client.on('data', () => {
       writes++
     })
     client.on('close', () => {
-      console.log(writes)
+      logClient(writes)
+      assert.ok(writes > 100)
       done()
     })
   })
@@ -150,12 +158,12 @@ describe('Proxy', function () {
     })
   })
 
-  it.skip('proxy should disconnect on remote server destroy', function (done) {
+  it('proxy should disconnect on remote server destroy', function (done) {
     const proxy = new Proxy()
+    _events('proxy', proxy)
 
     const test = {}
     const event = (ev) => {
-      console.log(ev)
       if (!test[ev]) test[ev] = 0
       test[ev]++
     }
@@ -165,18 +173,22 @@ describe('Proxy', function () {
     })
     proxy.on('close', () => {
       event('close')
-      console.log(test)
-      // assert.deepEqual(test, { listening: 1, connection: 1, error: 2 })
+      assert.equal(test.listening, 1)
+      assert.equal(test.connection, 1)
+      assert.equal(test.close, 1)
       done()
     })
     proxy.on('connection', () => event('connection'))
     proxy.on('listening', () => {
       event('listening')
-      clientWriter(PROXY_PORT, strDestroy)
+      clientWriter(PROXY_PORT, str)
+      setTimeout(() => {
+        _echo.destroyFirstSocket()
+      }, 100 )
     })
+
     setTimeout(() => {
-      console.log(proxy.server)
-      proxy.close()
-    }, 1000)
+      proxy.close() // stop the proxy
+    }, 200)
   })
 })
